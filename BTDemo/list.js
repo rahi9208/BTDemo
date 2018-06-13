@@ -1,5 +1,6 @@
 let AWS = require('aws-sdk');
 const ddb = new AWS.DynamoDB.DocumentClient();
+let translate = new AWS.Translate();
 exports.handler = function (event, context, callback) {
 
 	let response = {
@@ -14,15 +15,21 @@ exports.handler = function (event, context, callback) {
 
 	ddb.scan({
 		TableName: 'BTMenu', ExpressionAttributeValues: { ':it': itemType }, FilterExpression: 'itemType = :it'
-	}, function (err, data) {
+	}, async function (err, data) {
 		if (data.Items) {
-			response.body = JSON.stringify(data.Items.map(item => {
-				item.image = "https://s3.amazonaws.com/" + process.env["IMAGE_BUCKET"] + item.itemCode + ".jpg";
+			response.body = JSON.stringify(await Promise.all(data.Items.map(async (item) => {
+				item.image = "https://s3.amazonaws.com/" + process.env["IMAGE_BUCKET"] + "/" + item.itemCode + ".jpg";
+				item.itemName = await translateName(item.itemName, "zh");
 				return item;
-			}));
+			})));
 		}
 		callback(err, response);
 	});
 
 
 }
+
+async function translateName(name, to) {
+	return (await translate.translateText({ SourceLanguageCode: "en", TargetLanguageCode: to, Text: name }).promise()).TranslatedText;
+}
+
